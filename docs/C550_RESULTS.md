@@ -37,7 +37,7 @@
 8 个独立进程，`MACA_VISIBLE_DEVICES=0..7` 各占一卡，同时运行。
 每项测试 = 上游逻辑（提交 10 s + synchronize），实测每项约 18 分钟。
 
-| GPU | FP16 Dense (TFLOPS) | FP16 Sparse (TFLOPS) | 备注 |
+| GPU | FP16 Dense (TFLOPS) | "Sparse" (TFLOPS) | 备注 |
 |---|---|---|---|
 | 0 | **270.47** | 449.02 | |
 | 1 | 262.23 | 448.99 | |
@@ -50,7 +50,8 @@
 | 均值 | **262.98** | **448.96** | |
 
 - Dense 卡间离散度约 ±2%（`262.98 ± 5.4`），首卡略高（8 卡同时跑时 GPU0 拿到最多前端带宽）。
-- Sparse 8 卡误差仅 **±0.3%**，异常整齐 —— 见第 5 节，这是因为它并未真正启用稀疏。
+- Sparse 8 卡误差仅 **±0.3%**，异常整齐 —— 见第 5.1 节，这是因为它并未真正启用稀疏。
+- 修正记账后同一项在单卡上为 **223.56 TFLOPS**（dense 269.86），稀疏/dense 比值 <1，符合"转置布局 + 同一 dense kernel"。
 
 同时刻 GPU 状态（8 卡满载）：
 
@@ -174,6 +175,28 @@ cudaDeviceSynchronize();
 > MXCCL（`libmccl`）的 all-to-all 测试来验证，本次未做。
 
 ---
+
+## 6.5 修正后的单卡全精度实测（mx-burner）
+
+`./CUDABurner --mode benchmark --device 0 --precision FP64 FP32 TF32 FP16 BF16 INT8`
+
+| 精度 | 模式 | 结果 | Engine |
+|---|---|---|---|
+| FP64 | Dense | **4.57 TFLOPS** | CUDA Core (Native) |
+| FP32 | Dense | **35.63 TFLOPS** | CUDA Core (TC Disabled) |
+| TF32 | Dense | **106.45 TFLOPS** | Tensor Core (Default FP32) |
+| FP16 | Dense | **269.63 TFLOPS** | Tensor Core |
+| FP16 | "Sparse" | **223.68 TFLOPS** | 修正后按 dense 记账（原 449 为虚报） |
+| BF16 | Dense | **269.12 TFLOPS** | Tensor Core |
+| INT8 | Dense | **376.11 TOPS** | Tensor Core |
+| INT8 | Sparse | N/A | `unsupported on this backend: cuBLASLt Error - 15` |
+
+要点：
+
+- 进程输出 `CUDABurner finished cleanly` —— 逐项 try/catch 生效，单项失败不再终止整轮
+- FP16 Dense 269.63 与前一轮 262.98（8 卡并发）略高，因为单卡独占
+- INT8 376.11 TOPS 明显高于 2048³ 的 202.8，因为上游 INT8 用 8192³，利用率更高
+- FP16 "Sparse" 223.68 < Dense 269.63，符合"转置布局 + 同一 dense kernel"的预期
 
 ## 7. 复现命令
 

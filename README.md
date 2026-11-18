@@ -65,9 +65,11 @@ NVIDIA 的 GPU 算力基准与烤机工具，跑到曦云 C550 上。
 ## 3. 构建与运行
 
 ```bash
-./scripts/build.sh              # cucc 构建，默认用满核（JOBS=8 可覆盖）
+./scripts/build.sh                      # cucc 构建，默认用满核（JOBS=8 可覆盖）
 ./scripts/run.sh --mode benchmark --precision FP16 BF16
-./scripts/run8.sh benchmark FP16   # 8 卡并行，日志在 runs/
+./scripts/run.sh --mode benchmark --device 3          # 指定卡（新增）
+./scripts/run.sh --mode memory --device 0             # 内存/互连带宽（新增）
+./scripts/run8.sh benchmark FP16        # 8 卡并行，日志在 runs/
 ```
 
 > **注意**：上游程序在测试结束后会停在 `Press Ctrl+C to exit.` 而不自行退出（见 `main.cu`），
@@ -75,10 +77,10 @@ NVIDIA 的 GPU 算力基准与烤机工具，跑到曦云 C550 上。
 
 ## 4. 已知特性与限制
 
-1. **每项 benchmark 约 18 分钟**（不是 15 秒）。原因在上游计时方式：`benchmark_strategy.cpp`
-   先异步提交 10 秒（wall clock）再 `cudaDeviceSynchronize()`，而单次提交仅 4.7 μs、单次 GEMM 0.51 ms，
-   于是 10 秒内积压约 212 万次调用，GPU 需要约 1085 秒才算完。这是上游设计在快卡上的必然结果，
-   与移植无关。想快速出数请用小迭代基准（见 `docs/`）。
+1. **每项 benchmark 的耗时已修正**。上游是「异步提交 10 秒 → synchronize」，在 C550 上
+   （提交 4.7 μs / 执行 0.51 ms）会积压约 212 万次调用，单耗时 18 分钟。
+   本仓库改为每 16 次提交同步一次，队列深度有界：2 项从 36 分钟降到 **38 秒**。
+   这会改变各平台的绝对数值（更接近真实速率），如需与上游对比请用 `git checkout` 回到未改版本。
 2. **FP4 不可用**：cu-bridge 未提供 `cuda_fp4.h`，且 C550 `cc=8.0` 不满足上游 FP4 分支条件
    （需 9.0 或 8.9）。`compat/gemm_fp4_unimplemented.cpp` 提供抛异常的桩，保证链接通过且不静默出错。
 3. **FP8 编译通过但运行时不达**：上游要求 `cc==9.0` 或 `8.9`，C550 是 `8.0`，`operator_factory`
@@ -87,6 +89,18 @@ NVIDIA 的 GPU 算力基准与烤机工具，跑到曦云 C550 上。
    上游代码失败即置 0，不影响运行。
 5. **FP64 极慢**：`GemmGeneric<double>` 2048³ 在 C550 上首次调用耗时长，实测 45 秒未跑完第一项；
    需要时请单独给足时间。
+
+## 4.2 相对上游的行为修正
+
+除移植适配外，本仓库修正了上游 3 处问题（**均在 C550 上实测确认**）：
+
+| 问题 | 上游行为 | 本仓库 |
+|---|---|---|
+| 稀疏项虚报 | `gemm_sparse_tensorcore.cu` 未设 `CUBLASLT_MATMUL_DESC_SPARSE`，却按稀疏记双倍 | 按 dense 记账；平台无该属性时打印警告。C550 上 449 → **223.56** TFLOPS |
+| 计时积压 | 提交 10 s 再 sync，快卡上单耗 18 分钟 | 每 16 次提交 sync 一次，2 项 **38 秒** |
+| 单卡/单模式 | 只能 device 0，只能算力 | 新增 `--device N`、`--mode memory`（HBM/PCIe/P2P） |
+
+> 这些修改改变了上游的测量语义。要复现上游原始数值，请 `git checkout <上游 commit>`。
 
 ## 4.5 C550 实测摘要
 

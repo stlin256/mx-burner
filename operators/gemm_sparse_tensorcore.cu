@@ -1,5 +1,6 @@
 #include "operators/gemm_sparse_tensorcore.hpp"
 #include "utils/helpers.hpp"
+#include <cstdio>
 #include <cuda_fp16.h>
 
 // Helper to check cuBLAS LT errors
@@ -52,8 +53,22 @@ GemmSparseTensorCore::GemmSparseTensorCore(const OperatorDescriptor& desc, int m
     CUBLASLT_CHECK(cublasLtMatrixLayoutCreate(&B_desc_, cuda_data_type, k, n, k));
     CUBLASLT_CHECK(cublasLtMatrixLayoutCreate(&C_desc_, cuda_data_type, m, n, m));
 
-    // Theoretical peak performance for sparse is doubled.
-    gflops_or_gops_ = (2.0 * m_ * n_ * k_ * 2.0) / 1e9;
+    // mx-burner 改动：本实现只设置了 TRANSA，矩阵本身并不是 2:4 压缩存储，
+    // 因此实际执行的是 DENSE 的转置 GEMM。原代码无条件按稀疏记双倍吞吐，
+    // 会把结果虚报一倍（C550 实测 dense 263 / "sparse" 449，比值 1.71x 并非 2x）。
+    // 只有在平台提供 CUBLASLT_MATMUL_DESC_SPARSE 且送入压缩矩阵时才按稀疏记账。
+    bool sparse_credited = false;
+#ifdef CUBLASLT_MATMUL_DESC_SPARSE
+    // 注意：仅当 A/B 以 2:4 压缩格式存储时才可以打开；当前实现送的是全量矩阵，
+    // 故仍不记账，只在此处预留开关。
+    sparse_credited = false;
+#else
+    std::fprintf(stderr,
+        "[mx-burner] 本后端无 CUBLASLT_MATMUL_DESC_SPARSE（cu-bridge/mcblasLt 未提供）；"
+        "该条目实测为 DENSE-transposed GEMM，按 dense 记账，不计稀疏加成。\n");
+#endif
+    gflops_or_gops_ = (2.0 * m_ * n_ * k_) / 1e9;
+    if (sparse_credited) gflops_or_gops_ *= 2.0;
 }
 
 GemmSparseTensorCore::~GemmSparseTensorCore() {
