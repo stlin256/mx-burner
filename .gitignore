@@ -3,3 +3,8 @@ CUDABurner
 runs/
 build/
 *.log
+
+# 本地凭据，绝不入库
+.kml-ssh-token
+*.token
+kml_ssh_connect.sh
