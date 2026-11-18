@@ -27,7 +27,7 @@ NVIDIA 的 GPU 算力基准与烤机工具，跑到曦云 C550 上。
 | NVML（cu-bridge → libmxsml） | ✅ | 真读到 名字/驱动/温度/功耗/功耗上限/利用率/显存频率/throttle |
 | 单卡满载 | ✅ | GPU 利用率 99%，功耗 265 W（待机 93 W） |
 | 8 卡并行满载 | ✅ | 8 进程各占一卡，总功耗 **3576 W**（8×451 W，全部顶到 450 W 上限），55–64 °C |
-| benchmark 数值表 | ⏳ | 上游的计时逻辑在本卡上每项约 18 分钟，见第 4 节 |
+| benchmark 数值表 | ✅ | 8 卡 FP16 dense **262.98** / sparse **448.96** TFLOPS，明细见 [docs/C550_RESULTS.md](docs/C550_RESULTS.md) |
 
 单次 FP16 GEMM 实测（4096³，`cublasGemmEx` + `CUBLAS_GEMM_DEFAULT_TENSOR_OP`）：
 
@@ -88,6 +88,34 @@ NVIDIA 的 GPU 算力基准与烤机工具，跑到曦云 C550 上。
 5. **FP64 极慢**：`GemmGeneric<double>` 2048³ 在 C550 上首次调用耗时长，实测 45 秒未跑完第一项；
    需要时请单独给足时间。
 
+## 4.5 C550 实测摘要
+
+完整数据（含系统配置、逐卡数值、精度矩阵、内存带宽）见 **[docs/C550_RESULTS.md](docs/C550_RESULTS.md)**。
+
+**八卡 FP16（8 进程，`MACA_VISIBLE_DEVICES` 各占一卡，同时运行）**
+
+| GPU | Dense (TFLOPS) | Sparse (TFLOPS) |
+|---|---|---|
+| 0 | 270.47 | 449.02 |
+| 1 | 262.23 | 448.99 |
+| 2 | 259.46 | 448.79 |
+| 3 | 265.65 | 448.92 |
+| 4 | 260.17 | 449.11 |
+| 5 | 262.15 | 448.96 |
+| 6 | 262.15 | 448.93 |
+| 7 | 261.55 | 448.95 |
+| **均值** | **262.98** | **448.96** |
+
+> Sparse 一列是虚报：上游未设置 `CUBLASLT_MATMUL_DESC_SPARSE`，但记账乘了 2。真实约 224 TFLOPS。详见 docs 第 5 节。
+
+**精度支持矩阵（`cublasGemmEx`，2048³）**
+
+| 可选 | 不可选 |
+|---|---|
+| FP64 4.6 · FP32 34.6 · TF32 83.1 · BF16 174.1 · FP16 176.3 · INT8 202.8 TOPS | `COMPUTE_32F_FAST_16F/16BF`、FP8 E4M3/E5M2、FP6 E2M3/E3M2、FP4 E2M1、INT4（均 status 15） |
+
+**内存与互连**：HBM D2D **960.6 GB/s**；PCIe H2D/D2H 50.4/56.6 GB/s；P2P 55.3 GB/s（`cudaMemcpyPeer`，疑似走 PCIe 而非 MetaXLink，待用 MCCL 验证）。
+
 ## 5. 上游与致谢
 
 - 上游：[stlin256/CUDABurner](https://github.com/stlin256/CUDABurner) @ `d85c030`（2025-12-12）
@@ -103,5 +131,7 @@ NVIDIA 的 GPU 算力基准与烤机工具，跑到曦云 C550 上。
 | `compat/gemm_fp4_unimplemented.cpp` | 本仓库新增：FP4 桩 |
 | `Makefile` | 本仓库新增：cucc 构建 |
 | `scripts/` | 本仓库新增：构建 + 单卡 + 8 卡运行 |
+| `tools/` | 本仓库新增：精度能力探测、内存/P2P 探测 |
+| `docs/C550_RESULTS.md` | 本仓库新增：C550 完整实测数据 |
 | `PORTING.md` | 每处移植改动的依据与证据 |
 | `docs/README.upstream.md` | 上游 README 原文 |
