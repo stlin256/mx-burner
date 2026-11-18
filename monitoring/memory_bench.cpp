@@ -1,4 +1,4 @@
-// 本仓库新增：内存子系统带宽测试（上游 CUDABurner 不含此项）
+// 内存子系统带宽测试（CUDABurner 不含此项）
 #include "monitoring/memory_bench.hpp"
 #include <cuda_runtime.h>
 #include <cstdio>

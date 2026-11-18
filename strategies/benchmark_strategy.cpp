@@ -68,7 +68,7 @@ int max_candidate_dim(Precision p) {
 }  // namespace
 
 // 运行时尺寸自动探测：在候选边长上各短测一小段，取实测吞吐最高者。
-// 显式给了 MXBURNER_DIM（--size）时跳过探测，尊重用户/上游选择。
+// 显式给了 MXBURNER_DIM（--size）时跳过探测，尊重显式选择。
 int BenchmarkStrategy::autotune_dim(const OperatorDescriptor& desc) {
     if (std::getenv("MXBURNER_DIM") != nullptr) return 0;
 

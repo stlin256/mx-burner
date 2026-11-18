@@ -1,6 +1,6 @@
 #!/bin/bash
 # 8 卡并行：每卡一个独立进程，通过 MACA_VISIBLE_DEVICES 隔离。
-# 上游 main.cu 的 device_id 固定为 0，因此用进程级隔离而不是改源码。
+# main.cu 的 device_id 固定为 0，因此用进程级隔离而不是改源码。
 #   ./scripts/run8.sh benchmark FP16     # 8 卡都跑 benchmark/FP16
 #   ./scripts/run8.sh stress             # 8 卡都烤机
 set -uo pipefail
@@ -23,7 +23,7 @@ for i in $(seq 0 7); do
     echo "gpu$i pid=$!"
 done
 
-# 上游跑完后会停在 "Press Ctrl+C to exit." 不退出，这里轮询该标志再收尾
+# 程序跑完后会停在 "Press Ctrl+C to exit." 不退出，这里轮询该标志再收尾
 echo "等待完成（标志：Test finished）。日志：runs/gpu*.log"
 for _ in $(seq 1 360); do
     sleep 10

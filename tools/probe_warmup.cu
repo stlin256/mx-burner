@@ -24,7 +24,7 @@ int main(int argc, char** argv) {
                      CUBLAS_COMPUTE_32F, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
     };
 
-    // 预热：N 次连续提交后 sync 一次（模拟上游 for(i<10) 的形态）
+    // 预热：N 次连续提交后 sync 一次（模拟主程序的 for(i<10) 形态）
     for (int i = 0; i < warmup; ++i) gemm();
     cudaDeviceSynchronize();
 

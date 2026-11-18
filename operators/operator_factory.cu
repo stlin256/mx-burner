@@ -14,13 +14,13 @@
 namespace {
 
 // --- 矩阵尺寸选择 ---------------------------------------------------------
-// 上游硬编码：FP64=2048, INT8=8192, 其余=4096。
-// 实测（docs/C550_RESULTS.md 第 7 节，MetaX C550）显示部分精度在更大尺寸下
+// 固定边长：FP64=2048, INT8=8192, 其余=4096。
+// 实测（docs/C550_RESULTS.md 第 6.9 节，MetaX C550）显示部分精度在更大尺寸下
 // 吞吐显著更高，尤以 TF32 为甚（4096: 106.3 -> 8192: 129.4 TFLOPS, +22%）。
 //
 // 类别：**实测标定值**（非源码推导）。出处为 tools/probe_size.cu 的扫描结果。
 // 换平台/换库版本必须重测，不得直接沿用。
-int upstream_dim(Precision p) {
+int legacy_dim(Precision p) {
     if (p == Precision::FP64) return 2048;
     if (p == Precision::INT8) return 8192;
     return 4096;
@@ -41,7 +41,8 @@ int tuned_dim(Precision p) {
 int resolve_dim(Precision p) {
     const char* env = std::getenv("MXBURNER_DIM");
     if (env == nullptr) return tuned_dim(p);
-    if (std::strcmp(env, "upstream") == 0) return upstream_dim(p);
+    if (std::strcmp(env, "legacy") == 0 || std::strcmp(env, "upstream") == 0)
+        return legacy_dim(p);
     if (std::strcmp(env, "tuned") == 0) return tuned_dim(p);
     int d = std::atoi(env);
     return d > 0 ? d : tuned_dim(p);

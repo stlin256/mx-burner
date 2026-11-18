@@ -1,7 +1,7 @@
-// 移植层文件（非上游代码，不属于 CUDABurner 仓库）
+// 兼容层文件（CUDA 路径不含此文件）
 //
 // 背景：
-//   上游 operators/gemm_fp4_tensorcore.cu 依赖 <cuda_fp4.h>，该头随 CUDA >= 12.3 提供。
+//   operators/gemm_fp4_tensorcore.cu 依赖 <cuda_fp4.h>，该头随 CUDA >= 12.3 提供。
 //   MACA cu-bridge 3.7.1 的 include 目录里有 cuda_fp8.h，但没有 cuda_fp4.h。
 //
 // 本类在 C550 上运行时不可达：
@@ -25,7 +25,7 @@ GemmFp4TensorCore::GemmFp4TensorCore(const OperatorDescriptor& desc, int m, int 
       descriptor_(desc), gflops_or_gops_(0.0) {
     throw std::runtime_error(
         "GemmFp4TensorCore: FP4 GEMM 在本平台不可用"
-        "（MACA cu-bridge 未提供 cuda_fp4.h；上游要求 CUDA >= 12.3）。"
+        "（MACA cu-bridge 未提供 cuda_fp4.h；该头要求 CUDA >= 12.3）。"
         "C550 cc=8.0 不满足 FP4 所需的 cc 9.0 / 8.9。");
 }
 

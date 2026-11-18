@@ -1,5 +1,5 @@
 #!/bin/bash
-# 单卡运行；透传上游参数
+# 单卡运行；透传参数
 #   ./scripts/run.sh                        # 交互菜单
 #   ./scripts/run.sh --mode benchmark       # 全部精度
 #   ./scripts/run.sh --mode benchmark --precision FP16 BF16

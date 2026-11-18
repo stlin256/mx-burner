@@ -1,12 +1,12 @@
 # CUDABurner on MetaX C550 via cu-bridge (maca)
-# 上游源码零修改；移植动作仅三项：
+# CUDA 路径源码零修改；沐曦适配仅三项：
 #   1) -D 补 wrapper 缺失的 NVML_DEVICE_NAME_BUFFER_SIZE 别名
 #   2) -include MxSml.h 提供 mxsmlClocksThrottleReason* 真实宏（wrapper 别名链的末端）
 #   3) FP4 单元以 compat/ 桩替代（cu-bridge 无 cuda_fp4.h，且 C550 cc=8.0 运行时不达）
 CUCC   ?= /opt/maca/tools/cu-bridge/bin/cucc
 CBB     = /opt/maca/tools/cu-bridge
 INC     = -I$(CBB)/include -I/opt/maca/include/mxsml -I.
-# CUDA_VERSION=12030：上游把 GemmFp8/Fp4 的【类声明】包在 #if CUDA_VERSION>={11080,12030} 里，
+# CUDA_VERSION=12030：类声明被包在 #if 里 的【类声明】包在 #if CUDA_VERSION>={11080,12030} 里，
 # 而 operator_factory.cu 无条件引用这两个类，故必须声明为足够高的版本才能编过。
 DEFS    = -DCUDA_VERSION=12030 -DNVML_DEVICE_NAME_BUFFER_SIZE=NVML_DEVICE_NAME_V2_BUFFER_SIZE
 LIBS    = -L/opt/maca/lib -L/opt/mxdriver/lib -lcudart -lmcblas -lmcblasLt -lmxsml -lpthread

@@ -14,6 +14,6 @@ run_one() {
 }
 echo "===== A) autotune 默认（未给 --size）"
 run_one autotune --mode benchmark --device 0 --precision TF32 FP16 INT8
-echo "===== B) 强制上游尺寸"
+echo "===== B) 强制固定边长"
 run_one upstream --mode benchmark --device 0 --precision TF32 FP16 INT8 --size upstream
 echo SIZE_VERIFY_DONE
