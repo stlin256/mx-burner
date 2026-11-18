@@ -49,10 +49,10 @@ LIBS = -L/opt/maca/lib -L/opt/mxdriver/lib \
 
 CUDA 路径的算子与测量代码没有为沐曦改动，适配全部在编译期完成。
 
-### 2.1 `-DCUDA_VERSION=12030`
+### 2.1 `-DCUDA_VERSION=12080`
 
 **为什么需要**：`operators/gemm_fp8_tensorcore.hpp:7` 与 `gemm_fp4_tensorcore.hpp:7` 把
-`GemmFp8TensorCore` / `GemmFp4TensorCore` 的**类声明**包在 `#if CUDA_VERSION >= 11080 / 12030` 里，
+`GemmFp8TensorCore` / `GemmFp4TensorCore` 的**类声明**包在 `#if CUDA_VERSION >= 11080 / 12080` 里，
 而 `operators/operator_factory.cu:77` 与 `:94` **无条件**引用这两个类：
 
 ```cpp
@@ -67,7 +67,7 @@ operators/operator_factory.cu:77:45: error: unknown type name 'GemmFp8TensorCore
 operators/operator_factory.cu:94:45: error: unknown type name 'GemmFp4TensorCore'
 ```
 
-**为什么是 12030**：这是让两个类声明都成立的最小值。
+**为什么是 12080**：`cuda_fp4.h` 自 CUDA 12.8 才提供，12080 是让两个类声明都成立的最小值；低于它 FP4 单元根本编不过（这也是原代码里 `12030` 这个门槛写错的地方）。
 
 **为什么不影响行为**：`CUDA_VERSION` 只出现在三处条件编译里，不参与任何运行时判断。
 实际走不走 FP8/FP4 由 `cudaGetDeviceProperties` 的 `cc_major`/`cc_minor` 决定（C550 是 8.0）。

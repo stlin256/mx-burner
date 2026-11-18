@@ -6,9 +6,10 @@
 CUCC   ?= /opt/maca/tools/cu-bridge/bin/cucc
 CBB     = /opt/maca/tools/cu-bridge
 INC     = -I$(CBB)/include -I/opt/maca/include/mxsml -I.
-# CUDA_VERSION=12030：类声明被包在 #if 里 的【类声明】包在 #if CUDA_VERSION>={11080,12030} 里，
-# 而 operator_factory.cu 无条件引用这两个类，故必须声明为足够高的版本才能编过。
-DEFS    = -DCUDA_VERSION=12030 -DNVML_DEVICE_NAME_BUFFER_SIZE=NVML_DEVICE_NAME_V2_BUFFER_SIZE
+# CUDA_VERSION=12080：GemmFp8/GemmFp4 的类声明被包在
+# #if CUDA_VERSION >= {11080,12080} 里，而 operator_factory.cu 会引用这两个类，
+# 所以必须给足够高的版本。12080 同时也是 cuda_fp4.h 的真实门槛（12.8 起才有）。
+DEFS    = -DCUDA_VERSION=12080 -DNVML_DEVICE_NAME_BUFFER_SIZE=NVML_DEVICE_NAME_V2_BUFFER_SIZE
 LIBS    = -L/opt/maca/lib -L/opt/mxdriver/lib -lcudart -lmcblas -lmcblasLt -lmxsml -lpthread
 FLAGS   = -O3 -std=c++17 -Wall -Wextra
 # MxSml.h 提供 mxsmlClocksThrottleReason* 真实宏（wrapper 的别名链指向它）
