@@ -5,6 +5,8 @@
 #include <chrono>
 #include <algorithm>
 #include <map>
+#include <cstdlib>
+#include <string>
 
 BenchmarkStrategy::BenchmarkStrategy(GpuMonitor& monitor, const GpuProperties& props, const std::vector<std::string>& selected_precisions)
     : monitor_(monitor), gpu_props_(props) {
@@ -58,6 +60,70 @@ void BenchmarkStrategy::start() {
     worker_thread_ = std::thread(&BenchmarkStrategy::run_loop, this);
 }
 
+namespace {
+// 候选边长的上界：按精度限制，避免 FP64 在大尺寸上单次数秒、拖垮启动时间。
+int max_candidate_dim(Precision p) {
+    return (p == Precision::FP64) ? 4096 : 16384;
+}
+}  // namespace
+
+// 运行时尺寸自动探测：在候选边长上各短测一小段，取实测吞吐最高者。
+// 显式给了 MXBURNER_DIM（--size）时跳过探测，尊重用户/上游选择。
+int BenchmarkStrategy::autotune_dim(const OperatorDescriptor& desc) {
+    if (std::getenv("MXBURNER_DIM") != nullptr) return 0;
+
+    const int key = static_cast<int>(desc.precision) * 10 + static_cast<int>(desc.sparsity);
+    auto it = tuned_dim_cache_.find(key);
+    if (it != tuned_dim_cache_.end()) return it->second;
+
+    static const int cands[] = {2048, 4096, 8192, 16384};
+    const int max_dim = max_candidate_dim(desc.precision);
+    int best_dim = 0;
+    double best_rate = 0.0;
+
+    for (int d : cands) {
+        if (d > max_dim) continue;
+        try {
+            std::string notes;
+            auto op = OperatorFactory::create_gemm_operator(desc, gpu_props_, notes, d);
+            if (!op) continue;
+            for (int i = 0; i < 2; ++i) op->execute(0);
+            CUDA_CHECK(cudaDeviceSynchronize());
+
+            // 与正式测试同构：每 8 次提交 sync 一次，跑满 1 秒。
+            // 不能用「固定 8 次迭代」——大边长的短测与长测差异极大
+            // （C550 上 TF32 16384^3：8 次测得 ~120，跑满 10 秒只有 60）。
+            const double tune_seconds = 1.0;
+            const int kSyncEvery = 8;
+            long long iters = 0;
+            auto t0 = std::chrono::high_resolution_clock::now();
+            double elapsed = 0.0;
+            while (elapsed < tune_seconds) {
+                for (int k = 0; k < kSyncEvery; ++k) {
+                    op->execute(0);
+                    iters++;
+                }
+                CUDA_CHECK(cudaDeviceSynchronize());
+                elapsed = std::chrono::duration<double>(
+                    std::chrono::high_resolution_clock::now() - t0).count();
+            }
+            if (iters == 0 || elapsed <= 0.0) continue;
+
+            // get_gflops_or_gops() 返回单次 GEMM 的 GFLOP(GOPS)
+            double rate = iters * op->get_gflops_or_gops() / elapsed / 1000.0;  // -> TFLOPS/TOPS
+            if (rate > best_rate) {
+                best_rate = rate;
+                best_dim = d;
+            }
+        } catch (const std::exception&) {
+            cudaGetLastError();
+        }
+    }
+
+    tuned_dim_cache_[key] = best_dim;
+    return best_dim;
+}
+
 void BenchmarkStrategy::run_loop() {
     CUDA_CHECK(cudaSetDevice(gpu_props_.device_id));
 
@@ -75,9 +141,15 @@ void BenchmarkStrategy::run_loop() {
         // mx-burner 改动：整项包在 try/catch 内。某些后端对特定 compute/数据类型组合
         // 返回 CUBLAS_STATUS_NOT_SUPPORTED，且是在 execute() 阶段抛出（例如 mcblasLt 的
         // INT8 稀疏路径）。原实现无捕获，会让整个进程 terminate，丢掉后续所有项。
+        const int tuned_dim = autotune_dim(test_desc);
+
         std::unique_ptr<BaseOperator> op_holder;
         try {
-            op_holder = OperatorFactory::create_gemm_operator(test_desc, gpu_props_, current_result.notes);
+            op_holder = OperatorFactory::create_gemm_operator(test_desc, gpu_props_, current_result.notes, tuned_dim);
+            if (tuned_dim > 0) {
+                // factory 会写 out_notes，所以在它之后追加，标明本次实测所用边长
+                current_result.notes += " @" + std::to_string(tuned_dim);
+            }
             BaseOperator* op = op_holder.get();
             if (op == nullptr) {
                 if (current_result.notes.empty()) current_result.is_supported = false;

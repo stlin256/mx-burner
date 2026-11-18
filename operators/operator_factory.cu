@@ -1,5 +1,9 @@
 #include "operators/operator_factory.hpp"
 
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+
 
 #include "operators/gemm_generic.hpp"
 #include "operators/gemm_tensorcore.hpp"
@@ -7,14 +11,51 @@
 #include "operators/gemm_fp8_tensorcore.hpp"
 #include "operators/gemm_fp4_tensorcore.hpp"
 
+namespace {
+
+// --- 矩阵尺寸选择 ---------------------------------------------------------
+// 上游硬编码：FP64=2048, INT8=8192, 其余=4096。
+// 实测（docs/C550_RESULTS.md 第 7 节，MetaX C550）显示部分精度在更大尺寸下
+// 吞吐显著更高，尤以 TF32 为甚（4096: 106.3 -> 8192: 129.4 TFLOPS, +22%）。
+//
+// 类别：**实测标定值**（非源码推导）。出处为 tools/probe_size.cu 的扫描结果。
+// 换平台/换库版本必须重测，不得直接沿用。
+int upstream_dim(Precision p) {
+    if (p == Precision::FP64) return 2048;
+    if (p == Precision::INT8) return 8192;
+    return 4096;
+}
+
+int tuned_dim(Precision p) {
+    switch (p) {
+        case Precision::FP64: return 2048;   // 2048 后已饱和
+        case Precision::FP32: return 8192;   // 36.3 vs 4096 的 35.6
+        case Precision::TF32: return 8192;   // 129.4 vs 4096 的 106.3 (+22%)
+        case Precision::BF16: return 8192;   // 274.2; 16384 仅 +1.3% 但慢一倍
+        case Precision::FP16: return 8192;   // 274.9; 16384 为 278.0
+        case Precision::INT8: return 16384;  // 397.6 vs 8192 的 378.9 (+5%)
+        default: return 4096;
+    }
+}
+
+int resolve_dim(Precision p) {
+    const char* env = std::getenv("MXBURNER_DIM");
+    if (env == nullptr) return tuned_dim(p);
+    if (std::strcmp(env, "upstream") == 0) return upstream_dim(p);
+    if (std::strcmp(env, "tuned") == 0) return tuned_dim(p);
+    int d = std::atoi(env);
+    return d > 0 ? d : tuned_dim(p);
+}
+
+}  // namespace
+
 namespace OperatorFactory {
 
 std::unique_ptr<BaseOperator> create_gemm_operator(
-    const OperatorDescriptor& desc, const GpuProperties& props, std::string& out_notes) {
-    
-    int m = 4096, n = 4096, k = 4096;
-    if(desc.precision == Precision::FP64) { m=2048; n=2048; k=2048; }
-    if(desc.precision == Precision::INT8) { m=8192; n=8192; k=8192; }
+    const OperatorDescriptor& desc, const GpuProperties& props, std::string& out_notes, int dim_override) {
+
+    const int dim = dim_override > 0 ? dim_override : resolve_dim(desc.precision);
+    int m = dim, n = dim, k = dim;
 
     if (desc.sparsity == Sparsity::SPARSE) {
         if (props.cc_major >= 9) {

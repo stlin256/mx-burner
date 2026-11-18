@@ -69,6 +69,8 @@ NVIDIA 的 GPU 算力基准与烤机工具，跑到曦云 C550 上。
 ./scripts/run.sh --mode benchmark --precision FP16 BF16
 ./scripts/run.sh --mode benchmark --device 3          # 指定卡（新增）
 ./scripts/run.sh --mode memory --device 0             # 内存/互连带宽（新增）
+./scripts/run.sh --mode benchmark --size upstream     # 复现上游矩阵尺寸
+./scripts/run.sh --mode benchmark --size 8192         # 强制边长
 ./scripts/run8.sh benchmark FP16        # 8 卡并行，日志在 runs/
 ```
 
@@ -99,6 +101,7 @@ NVIDIA 的 GPU 算力基准与烤机工具，跑到曦云 C550 上。
 | 稀疏项虚报 | `gemm_sparse_tensorcore.cu` 未设 `CUBLASLT_MATMUL_DESC_SPARSE`，却按稀疏记双倍 | 按 dense 记账；平台无该属性时打印警告。C550 上 449 → **223.56** TFLOPS |
 | 计时积压 | 提交 10 s 再 sync，快卡上单耗 18 分钟 | 每 16 次提交 sync 一次，2 项 **38 秒** |
 | 单卡/单模式 | 只能 device 0，只能算力 | 新增 `--device N`、`--mode memory`（HBM/PCIe/P2P） |
+| 矩阵尺寸硬编码 | FP64 2048³ / 其余 4096³ / INT8 8192³，未验证是否饱和 | 运行时 **autotune** 扫描 {2048,4096,8192,16384}；TF32 因此提升 **+21%**。`--size upstream` 可复现原值 |
 
 > 这些修改改变了上游的测量语义。要复现上游原始数值，请 `git checkout <上游 commit>`。
 

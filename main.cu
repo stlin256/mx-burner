@@ -27,7 +27,7 @@ void signal_handler(int signum) {
 
 // Helper function to print usage
 void print_usage(const char* prog_name) {
-    std::cerr << "Usage: " << prog_name << " --mode [stress|benchmark|memory] [--device N] [--precision <p1> <p2> ...]" << std::endl;
+    std::cerr << "Usage: " << prog_name << " --mode [stress|benchmark|memory] [--device N] [--size upstream|tuned|N] [--precision <p1> <p2> ...]" << std::endl;
     std::cerr << "Example: " << prog_name << " --mode benchmark --precision FP16 FP32" << std::endl;
 }
 
@@ -43,6 +43,11 @@ int main(int argc, char** argv) {
             if (arg == "--mode") {
                 if (i + 1 < argc) {
                     mode = argv[++i];
+                }
+            } else if (arg == "--size") {
+                // upstream | tuned | 具体数字（同时作用于 M/N/K）
+                if (i + 1 < argc) {
+                    setenv("MXBURNER_DIM", argv[++i], 1);
                 }
             } else if (arg == "--device") {
                 if (i + 1 < argc) {
