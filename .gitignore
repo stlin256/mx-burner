@@ -1,0 +1,5 @@
+CUDABurner
+*.o
+runs/
+build/
+*.log

@@ -1,0 +1,31 @@
+#pragma once
+#include "base_strategy.hpp"
+#include "operators/operator_traits.hpp"
+#include "core/gpu_props.hpp"
+#include <vector>
+#include <mutex>
+
+class GpuMonitor; // Forward declaration
+
+class BenchmarkStrategy : public BaseStrategy {
+public:
+    BenchmarkStrategy(GpuMonitor& monitor, const GpuProperties& props, const std::vector<std::string>& selected_precisions = {});
+    void start() override;
+    const std::vector<BenchmarkResult>& get_results() const;
+    
+    // Benchmark模式下这两个函数意义不大，可以返回固定值
+    double get_current_performance() const override { return 0; }
+    std::string get_active_operators_name() const override { return "Benchmarking..."; }
+    int get_countdown() const override { return countdown_seconds_; }
+
+private:
+    void run_loop();
+    
+    GpuMonitor& monitor_;
+    GpuProperties gpu_props_;
+    std::vector<OperatorDescriptor> tests_to_run_;
+    
+    mutable std::mutex results_mutex_;
+    std::vector<BenchmarkResult> results_;
+    std::atomic<int> countdown_seconds_{0};
+};
